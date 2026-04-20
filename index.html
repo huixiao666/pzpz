@@ -295,7 +295,7 @@ body.nav-hidden .theme-btn { background: rgba(0,0,0,0.6); backdrop-filter: blur(
   <div class="sec-header"></div>
   <div class="search-container">
     <div class="embedded-browser">
-      <iframe src="https://huixiao666.github.io/cxc/" title="图片收藏" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals"></iframe>
+      <iframe src="https://huixiao666.github.io/cxc/" title="图片收藏" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals allow-downloads"></iframe>
     </div>
     <div class="search-tip">🖼️ 图片资源 | 由 huixiao666 提供</div>
   </div>
@@ -608,7 +608,14 @@ const TOOL_DATA = [
 
 /* 存储与主题切换 */
 const Storage={get:(k,d=null)=>{try{let v=localStorage.getItem('mediahub_'+k);return v?JSON.parse(v):d;}catch(e){return d;}},set:(k,v)=>{try{localStorage.setItem('mediahub_'+k,JSON.stringify(v));}catch(e){}}};
-const ACCENT_MAP={apps:'--app-accent',videos:'--video-accent',chat:'--chat-accent',search:'--search-accent',tools:'--tool-accent'};
+const ACCENT_MAP={
+  apps:'--app-accent',
+  videos:'--video-accent',
+  chat:'--chat-accent',
+  search:'--search-accent',
+  tools:'--tool-accent',
+  image:'--search-accent'   // 让图片模块也有强调色
+};
 
 // 视图切换核心函数
 function switchView(name){
