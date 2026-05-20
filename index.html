@@ -112,7 +112,9 @@ body.nav-hidden .theme-btn { background: rgba(0,0,0,0.6); backdrop-filter: blur(
   overflow-x:auto; padding-bottom:4px;
   -webkit-overflow-scrolling:touch;
 }
-.app-cat-scroll::-webkit-scrollbar { height:0; }
+.app-cat-scroll::-webkit-scrollbar { height:4px; }
+.app-cat-scroll::-webkit-scrollbar-track { background: transparent; }
+.app-cat-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 .app-cat-pill {
   padding:.4rem .9rem; border-radius:20px; cursor:pointer;
   border:1px solid var(--border); background:var(--bg2);
@@ -727,6 +729,20 @@ document.getElementById('toolsCateWrap').addEventListener('click',e=>{
   renderTools();
 });
 renderTools();
+
+/* ====== 分类横向滚动：桌面端支持鼠标滚轮 ====== */
+(function(){
+  var catScroll = document.getElementById('appCatScroll');
+  if (catScroll) {
+    catScroll.addEventListener('wheel', function(e) {
+      // 仅在水平方向可滚动时拦截滚轮转为水平滚动
+      if (catScroll.scrollWidth > catScroll.clientWidth) {
+        e.preventDefault();
+        catScroll.scrollLeft += e.deltaY;
+      }
+    }, { passive: false });
+  }
+})();
 </script>
 </body>
 </html>
