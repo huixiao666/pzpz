@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>导航</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  min-height:100vh; display:flex; align-items:center; justify-content:center;
+  font-family: 'Noto Sans SC', sans-serif;
+  transition: background 0.8s; position:relative;
+}
+body::after {
+  content:''; position:fixed; inset:0; background:rgba(0,0,0,0);
+  transition: background 0.5s; pointer-events:none; z-index:0;
+}
+[data-theme="dark"] body::after { background:rgba(0,0,0,0.55); }
+.container { text-align:center; position:relative; z-index:1; }
+.title {
+  font-size:2rem; font-weight:700; color:#fff; margin-bottom:2rem;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.3); letter-spacing:2px;
+}
+.btns { display:flex; gap:2rem; justify-content:center; flex-wrap:wrap; }
+.btn {
+  width:160px; height:160px; border-radius:50%; border:none;
+  font-size:1.4rem; font-weight:700; cursor:pointer; color:#fff;
+  backdrop-filter: blur(12px); background:rgba(255,255,255,0.15);
+  border:2px solid rgba(255,255,255,0.3);
+  transition: all 0.3s; letter-spacing:2px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+}
+.btn:hover { background:rgba(255,255,255,0.3); transform:scale(1.08); box-shadow:0 12px 40px rgba(0,0,0,0.3); }
+.btn i { font-size:3rem; }
+.btn small { font-size:0.7rem; opacity:0.7; }
+.theme-toggle {
+  position:fixed; top:20px; right:20px; width:44px; height:44px;
+  border-radius:50%; border:2px solid rgba(255,255,255,0.4);
+  background:rgba(255,255,255,0.15); backdrop-filter:blur(8px);
+  color:#fff; font-size:1.3rem; cursor:pointer; transition:all 0.3s;
+  display:flex; align-items:center; justify-content:center; z-index:999;
+}
+.theme-toggle:hover { background:rgba(255,255,255,0.3); transform:rotate(15deg); }
+
+[data-theme="dark"] .btn { background:rgba(0,0,0,0.3); border-color:rgba(255,255,255,0.15); }
+[data-theme="dark"] .btn:hover { background:rgba(0,0,0,0.5); }
+[data-theme="dark"] .theme-toggle { background:rgba(0,0,0,0.3); }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+<button class="theme-toggle" id="themeBtn" title="切换日夜模式">🌙</button>
+<div class="container">
+  <div class="title">🚀 皮卡导航</div>
+  <div class="btns">
+    <button class="btn" onclick="go('https://372164885.xyz')">
+      <i class="fas fa-star"></i>
+      <span>主网站</span>
+      <small>372164885.xyz</small>
+    </button>
+    <button class="btn" onclick="go('https://www.372164885.xyz')">
+      <i class="fas fa-server"></i>
+      <span>备用网站</span>
+      <small>www.372164885.xyz</small>
+    </button>
+    <button class="btn" onclick="go('https://huixiao666.github.io/xxx/')">
+      <i class="fas fa-cloud"></i>
+      <span>备用网站</span>
+      <small>GitHub Pages</small>
+    </button>
+  </div>
+</div>
+
+<script>
+// 随机渐变背景
+var gradients = [
+  'linear-gradient(135deg, #667eea, #764ba2)',
+  'linear-gradient(135deg, #f093fb, #f5576c)',
+  'linear-gradient(135deg, #4facfe, #00f2fe)',
+  'linear-gradient(135deg, #43e97b, #38f9d7)',
+  'linear-gradient(135deg, #fa709a, #fee140)',
+  'linear-gradient(135deg, #a18cd1, #fbc2eb)',
+  'linear-gradient(135deg, #fccb90, #d57eeb)',
+  'linear-gradient(135deg, #e0c3fc, #8ec5fc)',
+  'linear-gradient(135deg, #f5576c, #ff6f00)',
+  'linear-gradient(135deg, #0c3483, #a2b6df)',
+  'linear-gradient(135deg, #1a1a2e, #16213e, #0f3460)',
+  'linear-gradient(135deg, #ff4d6d, #ff8fa3)',
+  'linear-gradient(135deg, #11998e, #38ef7d)',
+  'linear-gradient(135deg, #fc4a1a, #f7b733)',
+  'linear-gradient(135deg, #00b4db, #0083b0)'
+];
+document.body.style.background = gradients[Math.floor(Math.random() * gradients.length)];
+
+function go(url) { window.open(url, '_self'); }
+
+// 日夜模式
+(function(){
+  var btn = document.getElementById('themeBtn');
+  var dark = localStorage.getItem('portal_dark');
+  if (dark === '1') { document.documentElement.setAttribute('data-theme','dark'); btn.textContent = '☀️'; }
+  btn.addEventListener('click', function(){
+    if (document.documentElement.getAttribute('data-theme') === 'dark') {
+      document.documentElement.removeAttribute('data-theme');
+      btn.textContent = '🌙';
+      localStorage.setItem('portal_dark', '0');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      btn.textContent = '☀️';
+      localStorage.setItem('portal_dark', '1');
+    }
+  });
+})();
+</script>
+</body>
+</html>
