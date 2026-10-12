@@ -168,16 +168,26 @@
   .cat-bar {
     display: flex;
     gap: 6px;
-    padding: 2px 12px 10px;
+    padding: 2px 12px 8px;
     overflow-x: auto;
     flex: 0 0 auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    /* 右侧渐隐，暗示可横向滚动 */
-    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
-    mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
+    /* 显式保留横向滚动条：12 个分类会超出宽度，
+       之前把滚动条藏起来导致「看不出还能横向滑动」 */
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    /* 滚动条已可见，无需再用渐隐遮罩暗示可滑动 */
+    -webkit-mask-image: none;
+    mask-image: none;
   }
-  .cat-bar::-webkit-scrollbar { display: none; }
+  .cat-bar::-webkit-scrollbar { height: 6px; }
+  .cat-bar::-webkit-scrollbar-thumb {
+    background: var(--scroll-thumb);
+    border-radius: 3px;
+  }
+  .cat-bar::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-h); }
+  .cat-bar::-webkit-scrollbar-track { background: transparent; }
   .cat-chip {
     flex: 0 0 auto;
     padding: 5px 12px;
@@ -511,7 +521,12 @@
     transition: opacity var(--dur-slow) var(--ease), transform var(--dur-base) var(--ease);
     /* 未加载完成时的占位高度，避免加载瞬间布局跳动 */
     min-height: 40px;
+    /* 预留 4:3 空间，图片解码前不再塌陷（首屏 CLS 主要来源） */
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    background: rgba(0, 0, 0, .04);
   }
+  .photo-img.loaded { aspect-ratio: auto; object-fit: contain; }
   .photo-link:hover .photo-img { transform: scale(1.015); }
   .photo-img.loading { opacity: 0; }
   .photo-fallback {
@@ -829,9 +844,6 @@
   body.dark .search:focus-within { background: #2b3848; }
   body.dark .chat-item.active .badge { background: #fff; color: var(--c-accent); }
 
-  body.dark .chat-body {
-    /* 背景改由 JS 变量驱动，深色模式不再一刀切禁用图案 */
-  }
   body.dark .date-divider span { background: rgba(0, 0, 0, .4); color: #cfd8e2; }
 
   body.dark .bubble .meta        { color: #7d8b99; }
@@ -1441,6 +1453,34 @@
       scroll-behavior: auto !important;
     }
   }
+
+  /* ================= 细节打磨 ================= */
+  /* 选中文字使用品牌色，避免默认蓝与主题冲突 */
+  ::selection { background: rgba(51, 144, 236, .28); }
+  body.dark ::selection { background: rgba(51, 144, 236, .45); }
+
+  /* 长链接与长文件名断行，避免撑破气泡 */
+  .link-url, .file-name { overflow-wrap: anywhere; }
+  .bubble .text { overflow-wrap: anywhere; }
+
+  /* 触屏设备隐藏仅悬浮可见的操作条，避免留下不可点击的残影 */
+  @media (hover: none) {
+    .msg:hover .msg-actions { display: none; }
+  }
+
+  /* 高对比度 / 强制颜色模式下保证边框可见 */
+  @media (forced-colors: active) {
+    .bubble, .chat-item, .badge, .reaction { border: 1px solid CanvasText; }
+    :focus-visible { outline: 2px solid Highlight; }
+  }
+
+  /* 打印时去掉外层投影与深色底，只保留内容 */
+  @media print {
+    body { background: #fff; padding: 0; }
+    .app { box-shadow: none; height: auto; width: 100%; }
+    .sidebar, .composer-wrap, .scroll-bottom, .chat-bg { display: none !important; }
+    .chat-body { overflow: visible; height: auto; }
+  }
 </style>
 </head>
 <body>
@@ -1465,7 +1505,7 @@
                aria-label="搜索会话">
       </div>
     </div>
-    <div class="cat-bar scroll-thin" id="catBar" role="tablist"
+    <div class="cat-bar" id="catBar" role="tablist"
          aria-label="会话分类"></div>
     <div class="chat-list scroll-thin" id="chatList" role="listbox" aria-label="会话"></div>
   </aside>
@@ -1822,8 +1862,9 @@
     },
     {
       id: 'man',
-      name: '',
-      char: '',
+      /* 原名称为空，会退化成「未命名会话」；按会话内容（网页版桌面 / macos.sakyubasu.moe）补名 */
+      name: '网页版桌面',
+      char: '桌',
       c1: '#7f7fd5', c2: '#86a8e7',
       status: '在线',
       online: true,
@@ -2119,8 +2160,12 @@
 
   /* 数据归一化：补齐默认值，避免渲染时反复判空 */
   chats.forEach(function (chat) {
-    chat.name    = chat.name || '未命名会话';
-    chat.char    = chat.char || (chat.name[0] || '?');
+    chat.name    = (chat.name || '').trim() || '未命名会话';
+    /* 首字兜底：中文取第一个字，纯英文取前两个字母更易辨认 */
+    if (!chat.char) {
+      const n = chat.name;
+      chat.char = /^[\x00-\x7F]+$/.test(n) ? n.slice(0, 2).toUpperCase() : n.slice(0, 1);
+    }
     chat.avatar  = chat.avatar || '';
     chat.c1      = chat.c1 || DEFAULT_AVATAR.c1;
     chat.c2      = chat.c2 || DEFAULT_AVATAR.c2;
@@ -2371,11 +2416,18 @@
 
     img.addEventListener('load', function () {
       img.classList.remove('loading');
+      img.classList.add('loaded');   // 解除 4:3 占位，改用真实比例
       // 图集里：按图片真实比例决定格子走向，竖图不被压扁
       if (cellCls && cellCls.indexOf('album-cell') !== -1 && img.naturalWidth && img.naturalHeight) {
         link.classList.toggle('portrait', img.naturalHeight > img.naturalWidth);
       }
-      if (nearBottomBeforeImage) { scrollToBottom(false); nearBottomBeforeImage = false; }
+      /* 仅当本次渲染的意图是「贴底」时才回到底部。
+         切群时意图是顶部（nearBottomBeforeImage=false），
+         这里绝不能滚动，否则图片陆续加载会把视点一路拽到底部。 */
+      if (nearBottomBeforeImage && !chatPinnedToTop) {
+        scrollToBottom(false);
+        nearBottomBeforeImage = false;
+      }
     }, { once: true });
 
     img.addEventListener('error', function () {
@@ -2387,6 +2439,8 @@
       if (img.parentNode === link) link.replaceChild(fb, img);
       // 加载失败时不再拦截点击，让链接照常在新窗口打开
       link.dataset.fallback = '1';
+      // 失败也需解除贴底等待，否则后续图片加载会误触发一次贴底滚动
+      nearBottomBeforeImage = false;
     }, { once: true });
 
     /* 点击图片 → 打开灯箱看大图（不再直接跳新窗口） */
@@ -2424,10 +2478,16 @@
   }
 
   /* 填充头像：有 avatar 字段就叠加图片，加载失败自动退回首字母。
-     node 需已包含首字母文本。 */
+     node 需已包含首字母文本。
+     防重入：快速切换会话时会被连续调用，用令牌作废前一次的回调，
+     避免旧图 load/error 回调操作已被移除的节点。 */
   function fillAvatar(node, chat) {
     node.style.setProperty('--avatar-c1', chat.c1);
     node.style.setProperty('--avatar-c2', chat.c2);
+
+    // 作废上一轮尚未返回的回调
+    const token = (Number(node.dataset.avatarToken) || 0) + 1;
+    node.dataset.avatarToken = String(token);
 
     // 切换会话时清掉上一次可能残留的图片/失败态
     const old = node.querySelector('.avatar-img');
@@ -2450,10 +2510,14 @@
     img.decoding = 'async';
     img.referrerPolicy = 'no-referrer';
 
-    img.addEventListener('load', function () { node.classList.remove('load-failed'); }, { once: true });
+    img.addEventListener('load', function () {
+      if (node.dataset.avatarToken !== String(token)) return;   // 已被后续调用取代
+      node.classList.remove('load-failed');
+    }, { once: true });
     img.addEventListener('error', function () {
+      if (node.dataset.avatarToken !== String(token)) return;
       // 图挂了：移除图片，露出首字母底色
-      if (img.parentNode) img.parentNode.removeChild(img);
+      if (img.parentNode === node) node.removeChild(img);
       node.classList.remove('has-photo');
       node.classList.add('load-failed');
     }, { once: true });
@@ -2485,6 +2549,9 @@
   function scrollToBottom(smooth) {
     const reduce = window.matchMedia &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // 主动贴底即视为放弃「锁定顶部」
+    chatPinnedToTop = false;
 
     if (smooth && !reduce && typeof chatBody.scrollTo === 'function') {
       chatBody.scrollTo({ top: chatBody.scrollHeight, behavior: 'smooth' });
@@ -2765,18 +2832,67 @@
     return row;
   }
 
-  function renderMessages() {
+  /* 渲染当前会话消息。
+     align: 'top'    = 定位到最上面（切换会话时的默认行为）
+            'bottom' = 定位到最下面（发送消息 / 清空后等场景）
+            false   = 保持当前位置不滚动 */
+  function renderMessages(align) {
     const chat = getActive();
     const frag = document.createDocumentFragment();
-    nearBottomBeforeImage = true;   // 首屏图片加载完成后保持贴底
+
+    /* 先确定本次渲染的锚定意图，再做任何 DOM 操作：
+       - nearBottomBeforeImage: 仅贴底时，图片加载完才需要回底
+       - chatPinnedToTop:       锁定顶部，禁止任何回调滚动视点
+       必须在 buildMessage 之前设置，因为构建过程会挂上图片 load 回调。 */
+    nearBottomBeforeImage = (align === 'bottom');
+    chatPinnedToTop = (align === 'top');
+
+    /* 冻结平滑滚动：整列 DOM 重建后浏览器会重算滚动锚点，
+       若此时还开着 scroll-behavior:smooth，视觉上就是「一路滑到底部」。 */
+    const freeze = (align === 'top');
+    if (freeze) chatBody.style.scrollBehavior = 'auto';
+
     chat.messages.forEach(function (m, i) { frag.appendChild(buildMessage(m, false, i)); });
     if (chat.typing) frag.appendChild(createTypingRow());
 
     chatBody.innerHTML = '';
     chatBody.appendChild(frag);
     chatBody.appendChild(scrollBottomBtn);   // 悬浮按钮始终保留在容器内
-    scrollToBottom(false);
+
+    if (align === 'top') {
+      chatBody.scrollTop = 0;                // 直接赋值，必定瞬时
+    } else if (align !== false) {
+      scrollToBottom(false);
+    } else {
+      chatBody.scrollTop = 0;
+    }
     clearMsgSearchUi();
+
+    /* 连续两帧把视点钉在顶部：首帧完成布局，次帧压过图片解码引起的重排。
+       之后才恢复 CSS 的平滑滚动。 */
+    if (freeze) {
+      requestAnimationFrame(function () {
+        chatBody.scrollTop = 0;
+        requestAnimationFrame(function () {
+          chatBody.scrollTop = 0;
+          chatBody.style.scrollBehavior = '';
+        });
+      });
+    }
+  }
+
+  /* 滚到会话最顶部：切换会话时从这里开始阅读。
+     注意：.chat-body 上有 CSS `scroll-behavior: smooth`，而 scrollTo 的
+     behavior:'auto' 是「沿用 CSS 设置」的意思，仍然会平滑动画 —— 表现为
+     切进群后画面一路滑到底部。这里必须显式覆盖为 instant 才能真正跳到顶部。 */
+  function scrollToTop() {
+    try {
+      chatBody.scrollTo({ top: 0, behavior: 'instant' });
+    } catch (e) {
+      chatBody.scrollTop = 0;   // 老浏览器不支持 instant 选项时兜底
+    }
+    // 顶部时不需要「回到底部」按钮
+    scrollBottomBtn.classList.toggle('show', !isNearBottom());
   }
 
   function appendMessage(m) {
@@ -2854,13 +2970,9 @@
 
     const bottom = el('div', 'ci-bottom');
     bottom.appendChild(el('span', 'ci-msg', previewOf(chat)));
-    if (chat.unread > 0 && !chat.muted) {
+    if (chat.unread > 0) {
       const b = el('span', 'badge', chat.unread > 99 ? '99+' : String(chat.unread));
-      b.setAttribute('aria-label', '未读 ' + chat.unread + ' 条');
-      bottom.appendChild(b);
-    } else if (chat.unread > 0 && chat.muted) {
-      const b = el('span', 'badge', chat.unread > 99 ? '99+' : String(chat.unread));
-      b.setAttribute('aria-label', '未读 ' + chat.unread + ' 条（免打扰）');
+      b.setAttribute('aria-label', '未读 ' + chat.unread + ' 条' + (chat.muted ? '（免打扰）' : ''));
       bottom.appendChild(b);
     }
     main.appendChild(bottom);
@@ -2908,6 +3020,19 @@
     ctxMenu.style.top  = Math.max(8, top) + 'px';
   });
 
+  /* 会话是否命中搜索词：除了会话名，也匹配会话内消息内容。
+     分类群里有数百个站点，只比对会话名会让「原神」「淘宝」等搜不到。 */
+  function chatMatches(chat, q) {
+    if (!q) return true;
+    if (chat.name.toLowerCase().indexOf(q) !== -1) return true;
+    if (chat.status && chat.status.toLowerCase().indexOf(q) !== -1) return true;
+    const list = chat.messages;
+    for (let i = 0; i < list.length; i++) {
+      if (searchableText(list[i]).toLowerCase().indexOf(q) !== -1) return true;
+    }
+    return false;
+  }
+
   function renderChatList(filter) {
     const q = (filter || '').trim().toLowerCase();
     const frag = document.createDocumentFragment();
@@ -2919,14 +3044,15 @@
     });
 
     ordered.forEach(function (chat) {
-      if (q && chat.name.toLowerCase().indexOf(q) === -1) return;
+      if (!chatMatches(chat, q)) return;
       frag.appendChild(buildChatItem(chat));
       shown++;
     });
 
     chatListEl.innerHTML = '';
     if (shown === 0) {
-      chatListEl.appendChild(el('div', 'empty-tip', '没有找到匹配的会话'));
+      chatListEl.appendChild(el('div', 'empty-tip',
+        q ? '没有找到与「' + (filter || '').trim() + '」相关的会话' : '暂无会话'));
     } else {
       chatListEl.appendChild(frag);
     }
@@ -3005,6 +3131,7 @@
     appEl.classList.remove('show-sidebar');   // 移动端：回到聊天区
     clearAutoReplyTimers();
     cancelReply();
+    userNavigated = true;   // 用户已手动切换会话，首屏贴底逻辑不再接管
 
     if (id === activeId) {
       const c = getActive();
@@ -3020,10 +3147,10 @@
 
     renderChatList(searchInput.value);
     updateHeader();
-    renderMessages();
     updatePinnedBar();
     closeEmojiPanel();
-    closeMsgSearch();
+    closeMsgSearch();          // 先关搜索（若开着会重建一次）
+    renderMessages('top');     // 最后定位到顶部，确保不被后续调用冲掉
     persist();
   }
 
@@ -3144,12 +3271,24 @@
   });
 
   document.addEventListener('click', function (e) {
+    // 合并原先的两个 document click 监听：统一收拢「点击外部关闭浮层」
     if (!emojiPanel.contains(e.target) && !emojiBtn.contains(e.target)) closeEmojiPanel();
+    if (!ctxMenu.contains(e.target)) closeCtxMenu();
+    if (!reactionPicker.contains(e.target)) closeReactionPicker();
   });
 
   document.addEventListener('keydown', function (e) {
+    // 灯箱内左右方向键切换
+    if (lightbox.classList.contains('open')) {
+      if (e.key === 'ArrowLeft')  { lbStep(-1); return; }
+      if (e.key === 'ArrowRight') { lbStep(1);  return; }
+      trapFocus(lightbox, e);
+    }
+    // 模态面板开启时把 Tab 限制在面板内
+    if (profileMask.classList.contains('open')) trapFocus(profileMask, e);
+
     if (e.key !== 'Escape') return;
-    // 优先级：灯箱 → 右键菜单 → 表情选择器 → 个人信息面板 → 消息搜索 → 表情面板
+    // 优先级：灯箱 → 右键菜单 → 表情选择器 → 个人信息面板 → 消息搜索 → 引用 → 表情面板
     if (lightbox.classList.contains('open')) { closeLightbox(); return; }
     if (ctxMenu.classList.contains('open')) { closeCtxMenu(); return; }
     if (reactionPicker.classList.contains('open')) { closeReactionPicker(); return; }
@@ -3159,12 +3298,7 @@
     closeEmojiPanel();
   });
 
-  // 灯箱内左右方向键切换
-  document.addEventListener('keydown', function (e) {
-    if (!lightbox.classList.contains('open')) return;
-    if (e.key === 'ArrowLeft')  { lbStep(-1); }
-    if (e.key === 'ArrowRight') { lbStep(1); }
-  });
+  // 灯箱左右方向键切换已合并进上方 keydown 处理器
 
   /* =========================================================
      10. 搜索过滤
@@ -3207,6 +3341,25 @@
   /* =========================================================
      12. 个人信息面板
      ========================================================= */
+  /* 焦点陷阱：模态面板声明了 aria-modal="true"，但没有陷阱时
+     键盘用户按 Tab 会跑到面板背后的内容上。这里把 Tab 循环限制在面板内。 */
+  function trapFocus(container, e) {
+    if (e.key !== 'Tab') return;
+    const sel = 'a[href], button:not([disabled]), input:not([disabled]), ' +
+                'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const items = Array.prototype.filter.call(
+      container.querySelectorAll(sel),
+      function (n) { return n.offsetWidth > 0 || n.offsetHeight > 0 || n === document.activeElement; }
+    );
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
+  }
+
   function openProfile() {
     fillAvatar(profileAvatar, ME);
     profileName.textContent   = ME.name;
@@ -3366,7 +3519,7 @@
     const chat = getActive();
     const kept = chat.messages.filter(function (m) { return m.type === 'date'; });
     chat.messages = kept;
-    renderMessages();
+    renderMessages('top');   // 清空后回到顶部
     renderChatList(searchInput.value);
     persist();
     showToast('已清空「' + chat.name + '」的聊天记录');
@@ -3377,12 +3530,10 @@
      ========================================================= */
   let searchHits = [];      // 命中的消息索引（升序）
   let searchCursor = -1;    // 当前停留第几处（对应 searchHits 下标）
-  let searchCache = [];     // [{index, path, offset}] 用于高亮定位
 
   function clearMsgSearchUi() {
     searchHits = [];
     searchCursor = -1;
-    searchCache = [];
     if (msgSearchCount) msgSearchCount.textContent = '0/0';
     if (msPrevBtn) msPrevBtn.disabled = true;
     if (msNextBtn) msNextBtn.disabled = true;
@@ -3404,6 +3555,9 @@
 
   /* 把命中的关键词包成 <mark class="hit">，只处理文本节点，避免破坏结构 */
   function highlightIn(root, term, hitCounter) {
+    /* 空词保护：indexOf('') 恒为 0 且 from 不前进，会造成死循环 */
+    if (!root || !term || !term.length) return;
+
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
     const targets = [];
     let node;
@@ -3422,9 +3576,7 @@
         const mark = document.createElement('mark');
         mark.className = 'hit';
         mark.textContent = value.slice(at, at + term.length);
-        const seq = hitCounter.n++;
-        mark.dataset.hitSeq = String(seq);
-        searchCache.push({ seq: seq, node: mark });
+        hitCounter.n++;
         frag.appendChild(mark);
         from = at + term.length;
       }
@@ -3505,10 +3657,13 @@
   }
 
   function closeMsgSearch() {
+    // 搜索栏本来就没开时直接返回：否则会额外触发一次整列重建 + 滚动，
+    // 把手动定位（例如切会话停在顶部）冲掉。
+    if (!msgSearchBar.classList.contains('open')) return;
     msgSearchBar.classList.remove('open');
     msgSearchInput.value = '';
     clearMsgSearchUi();
-    renderMessages();
+    renderMessages('bottom');   // 关闭搜索后回到最新消息
   }
 
   msgSearchInput.addEventListener('input', applyMsgSearch);
@@ -3803,7 +3958,7 @@
     chat.messages.splice(index, 1);
     // 索引会变，重置消息置顶
     chat.pinnedMsg = null;
-    renderMessages();
+    renderMessages('bottom');   // 删除后回到最新消息处
     renderChatList(searchInput.value);
     updatePinnedBar();
     persist();
@@ -3838,11 +3993,6 @@
     if (!m) return;
     e.preventDefault();
     openCtxMenu(e.clientX, e.clientY, m, +idx);
-  });
-
-  document.addEventListener('click', function (e) {
-    if (!ctxMenu.contains(e.target)) closeCtxMenu();
-    if (!reactionPicker.contains(e.target)) closeReactionPicker();
   });
 
   window.addEventListener('resize', closeCtxMenu);
@@ -3966,20 +4116,30 @@
     showToast(chat.muted ? '已开启「' + chat.name + '」的免打扰' : '已关闭免打扰');
   }
 
-  function commitSentMessage(chat) {
-    // 发送后：先把本条标为未读（单勾），再由自动回复置为已读
-    const last = chat.messages[chat.messages.length - 1];
-    if (last && last.dir === 'out') last.read = false;
-  }
-
   /* =========================================================
      21. 回到底部
      ========================================================= */
   scrollBottomBtn.addEventListener('click', function () { scrollToBottom(true); });
 
+  /* 滚动监听：isNearBottom() 会读取 scrollHeight/clientHeight 触发重排，
+     直接挂在 scroll 上会在惯性滚动时每帧多次调用。用 rAF 合并到每帧一次。
+     同时：用户一旦向下滚动，就解除「锁定顶部」，后续新消息/图片才能正常贴底。 */
+  let scrollRaf = 0;
   chatBody.addEventListener('scroll', function () {
-    scrollBottomBtn.classList.toggle('show', !isNearBottom());
+    // 用户手动滚动（滚轮/触摸/键盘）解除顶部锁定；程序性滚动不算
+    if (chatPinnedToTop && chatBody.scrollTop > 8) chatPinnedToTop = false;
+
+    if (scrollRaf) return;
+    scrollRaf = (window.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); })(function () {
+      scrollRaf = 0;
+      scrollBottomBtn.classList.toggle('show', !isNearBottom());
+    });
   }, { passive: true });
+
+  /* 明确的用户意图：滚轮 / 触摸拖动 / 方向键，直接解除顶部锁定 */
+  ['wheel', 'touchmove', 'keydown'].forEach(function (t) {
+    chatBody.addEventListener(t, function () { chatPinnedToTop = false; }, { passive: true });
+  });
 
   /* =========================================================
      22. 主题切换
@@ -4020,11 +4180,17 @@
      旧快照可能残留已废弃的站点会话消息，故换键让旧数据自然失效 */
   const STORAGE_KEY = 'tg-chat-state-v2';
 
+  /* 持久化只排除「可再生的内容」：分类群（cat-*）的数百条站点卡片由
+     SITE_CHATS 每次启动重新生成，落盘既无意义又占用配额。
+     其余会话（含用户新增消息、已读/置顶/免打扰状态）照常保存，
+     因此不会丢失任何用户改动。 */
   function persist() {
     try {
       const snapshot = {
         activeId: activeId,
-        chats: chats.map(function (c) {
+        chats: chats.filter(function (c) {
+          return !c.isCatGroup;   // 分类群可完全再生，不落盘
+        }).map(function (c) {
           return {
             id: c.id,
             unread: c.unread,
@@ -4040,6 +4206,29 @@
     } catch (e) { /* 存储不可用或超限，静默降级 */ }
   }
 
+  /* 校验单条消息的最小可用结构：损坏数据若直接进入渲染会抛错，
+     因此这里逐条过滤，只保留字段合法的消息。 */
+  function isValidMessage(m) {
+    if (!m || typeof m !== 'object') return false;
+    const t = m.type;
+    if (typeof t !== 'string') return false;
+    if (t === 'date') return typeof m.text === 'string';
+    if (m.dir !== 'in' && m.dir !== 'out') return false;
+    if (t === 'text')  return typeof m.text === 'string';
+    if (t === 'file')  return typeof m.name === 'string';
+    if (t === 'link')  return typeof m.url === 'string' && m.url.length > 0;
+    if (t === 'image') return typeof m.url === 'string' && m.url.length > 0;
+    if (t === 'album') return Array.isArray(m.images) &&
+      m.images.length > 0 &&
+      m.images.every(function (i) { return i && typeof i.url === 'string' && i.url.length > 0; });
+    if (t === 'voice') return true;
+    return false;   // 未知类型一律丢弃，避免渲染分支落空
+  }
+
+  function sanitizeMessages(list) {
+    return list.filter(isValidMessage);
+  }
+
   function restore() {
     const raw = store.get(STORAGE_KEY);
     if (!raw) return;
@@ -4053,12 +4242,18 @@
     chats.forEach(function (chat) {
       const saved = map[chat.id];
       if (!saved) return;
-      if (Array.isArray(saved.messages)) chat.messages = saved.messages;
-      if (typeof saved.unread === 'number') chat.unread = saved.unread;
+      // 快照里的消息必须先过结构校验，否则损坏数据会让 renderMessages 抛错并白屏
+      if (Array.isArray(saved.messages)) {
+        const clean = sanitizeMessages(saved.messages);
+        // 只有解析出内容时才覆盖内置数据；空结果视为快照损坏，保留原始 demo 数据
+        if (clean.length) chat.messages = clean;
+      }
+      if (typeof saved.unread === 'number' && saved.unread >= 0) chat.unread = saved.unread;
       if (typeof saved.time === 'string') chat.time = saved.time;
       chat.pinned = !!saved.pinned;
       chat.muted = !!saved.muted;
-      chat.pinnedMsg = (typeof saved.pinnedMsg === 'number') ? saved.pinnedMsg : null;
+      chat.pinnedMsg = (typeof saved.pinnedMsg === 'number' &&
+        saved.pinnedMsg >= 0 && saved.pinnedMsg < chat.messages.length) ? saved.pinnedMsg : null;
     });
 
     if (data.activeId && chats.some(function (c) { return c.id === data.activeId; })) {
@@ -4071,6 +4266,9 @@
      ========================================================= */
   let activeId = chats[0].id;
   let nearBottomBeforeImage = false;
+  /* 本次渲染是否「锁定在顶部」。切群后置 true，
+     任何图片加载/布局回调都不得滚动视点，直到用户主动滚动。 */
+  let chatPinnedToTop = false;
 
   restore();
 
@@ -4083,7 +4281,7 @@
   updateHeader();
   buildCatBar();
   renderChatList('');
-  renderMessages();
+  renderMessages('bottom');   // 首屏落在最新消息
   updatePinnedBar();
 
   /* 窄屏（<=820px）下默认展示会话列表，而不是直接进聊天窗口。
@@ -4107,7 +4305,12 @@
     else if (mq.addListener) mq.addListener(onMqChange);   // 旧版 Safari
   }
 
+  /* 首屏图片加载完成后贴底，保证落在最新消息。
+     但若用户在 load 之前已经手动切换过会话（此时定位意图是「顶部」），
+     就不能再把视点抢回底部。 */
+  let userNavigated = false;
   window.addEventListener('load', function () {
+    if (userNavigated) return;
     scrollToBottom(false);
     scrollBottomBtn.classList.remove('show');
   }, { once: true });
